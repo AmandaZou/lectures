@@ -53,7 +53,4 @@ Nov. 27 | Reading day, no class
 Nov. 29 | Thanksgiving, no class
 Dec. 02 | 
 Dec. 04 | 
-Dec. 09 | Final, 3:30 to 5:30 pm
-
-**Note** The final is determined by the university and cannot be changed 
-(https://registrar.tamu.edu/Courses,-Registration,-Scheduling/Final-Examination-Schedules#5-December11(Wednesday))
+Dec. 11 | Final, 10:30 to 12:30 pm

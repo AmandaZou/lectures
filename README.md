@@ -10,8 +10,8 @@ for each day:
 Date    | Slides
 --------|--------
 Aug. 26 | We went over the syllabus and gave a high level overview of what the course will entail.  Additionally, we defined some common terms/concepts that will be used throughout the course.
-Aug. 28 |
-Aug. 30 |
+Aug. 28 | We talked extensively about R, Rstudio, and R markdown, exploring the styleGuide and beginning to look at the introFlightExample
+Aug. 30 | We will continue looking at the introFlightExample file
 Sep. 02 |
 Sep. 04 |  
 Sep. 06 |  

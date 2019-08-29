@@ -1,0 +1,178 @@
+---
+title: 'STAT656: Introductory Flight Example'
+subtitle: Getting oriented with R, R Markdown, and tidying
+output:
+  html_document: default
+---
+
+# Reading in the data
+We want to load in the data (after inspecting it in some manner e.g. the unix command 'head -3 934548400_T_ONTIME_REPORTING.csv').  We can alternatively inspect it through R itself:
+```{r}
+readLines('934548400_T_ONTIME_REPORTING.csv', n = 3)
+```
+
+We find that there is a mixture of numeric and string data. ALso, there is a trailing empty column 
+due to the comma ending each line.  The [read.csv](https://www.youtube.com/watch?v=qK1ElUMkhq0&list=PLOU2XLYxmsIK9qQfztXeybpHvru-TrqAP&index=9&t=3s "Google's R Videos") function automatically interprets strings as [factors](https://cran.r-project.org/doc/manuals/R-intro.html#Factors).  We are going to sub-select
+from the levels of this qualitative explanatory variable, so we don't want it to create a factor
+on import (after reading/experimenting with factors, why would this matter?)
+```{r readFlightData, cache = TRUE}
+flightData = read.csv('934548400_T_ONTIME_REPORTING.csv',header=TRUE,stringsAsFactors = FALSE)
+```
+
+Now, we would want to see if what we got is what we expect.  For instance, the dimensions are `r dim(flightData)`.
+
+# Some data structure comments
+
+In computer science, a data structure is a storage format for information.  We have seen one so far:
+
+## Strings/Characters
+
+```{r}
+stringExample = 'any quoted is a string'
+print(stringExample)
+paste(stringExample,"double quotes also work",sep='; ')
+is.character(stringExample)
+typeof(stringExample)
+```
+
+## Floats and integers
+```{r}
+floatExample = 1
+print(floatExample)
+is.double(floatExample)
+typeof(floatExample)
+object.size(floatExample)
+```
+
+## data.frame
+By default, the output of read.csv is a [data.frame](https://www.youtube.com/watch?v=qK1ElUMkhq0&list=PLOU2XLYxmsIK9qQfztXeybpHvru-TrqAP&index=9&t=0s "Google's R Videos").  This can be checked in a several ways, namely 
+
+```{r}
+is.data.frame(flightData)
+```
+
+We are going to be using a very nice implementation of the "Split-Apply-Combine" idea known as the [tidyverse](https://r4ds.had.co.nz/index.html "R for Data Science").  The first step is to convert the object
+from a data.frame to a tibble.  
+
+# Installing/loading packages
+R works by having some base functions that are always loaded (e.g. typeof).  To keep things uncluttered, all the 
+extra functionality are kept in packages that must be installed and the loaded into memory.  Let's do just that with
+the tidyverse package:
+```{r}
+if(!require(tidyverse)){install.packages('tidyverse');require(tidyverse)}
+```
+Note that here I've used [conditionals](https://www.youtube.com/watch?v=eVEx_pBEkRI&list=PLOU2XLYxmsIK9qQfztXeybpHvru-TrqAP&index=11&t=0s "Google's R Videos")
+
+# The tibble data structure
+If we have a data.frame, we can usually convert it to a [tibble](https://r4ds.had.co.nz/tibbles.html "R for Data Science") by doing:
+
+```{r dataFrameToTibble, cache=TRUE}
+flightDataTB = as_tibble(flightData)
+flightDataTB
+```
+
+Note that a nice feature of tibble is that it only prints the header, not the whole object (if we had tried this with flightData, it would have printed out `r nrow(flightData)` rows.  Try it, if you dare!)
+
+Note that we can directly import into the tibble data structure using [read_csv](https://r4ds.had.co.nz/data-import.html "R for Data Science")
+
+```{r loadIntoTibble}
+flightDataTB = read_csv('934548400_T_ONTIME_REPORTING.csv')
+names(flightDataTB)
+flightDataTB
+```
+
+
+# Back to the question
+In there any difference in delay length in January 2018 between IAH or DFW?  
+
+Continuing to convert this to
+a statistical question, we can look into testing if the population mean delay time at IAH equals the population 
+mean delay time at DFW.
+
+
+Let's use split/apply/combine to get the relevant information.  A good metaphor for thinking about this is 
+in terms of `grammar'; there are nouns (the objects) and verbs (the functions).  We will keep exploring this
+idea, but here is brief glimpse
+
+
+```{r}
+flightDataTB_originDelay       = select(flightDataTB,ORIGIN,DEP_DELAY_NEW,DEP_DELAY)
+flightDataTB_originDelayIAHDFW = filter(flightDataTB_originDelay, ORIGIN == 'IAH' | ORIGIN == 'DFW')
+dim(flightDataTB_originDelayIAHDFW)
+```
+
+Before we get too far here, let's make an adjustment to this code.  Notice how we are getting complicated object names and writing very similar things over and over? 
+It is very easy for typos and bugs to appear in your code this way.  [Pipes](https://r4ds.had.co.nz/pipes.html "R for Data Science") to the rescue!
+
+```{r}
+flightDataTB  %>% 
+  select(ORIGIN,DEP_DELAY_NEW, DEP_DELAY) %>%
+  filter(ORIGIN == 'IAH' | ORIGIN == 'DFW') %>%
+  dim(.)
+```
+Much cleaner, easier to read, and debug.  Now, we are free to investigate the question statistically.  
+
+```{r}
+(Ybar = flightDataTB  %>% 
+  select(ORIGIN,DAY_OF_MONTH, DEP_DELAY_NEW, DEP_DELAY) %>%
+  filter(ORIGIN == 'IAH' | ORIGIN == 'DFW') %>%
+  group_by(ORIGIN) %>%
+  summarise(Ybar = mean(DEP_DELAY_NEW, na.rm = TRUE)))
+```
+So, we get Ybar_IAH  = `r filter(Ybar,ORIGIN == 'IAH') %>% select(Ybar)` and Ybar_DFW  = `r filter(Ybar,ORIGIN == 'DFW') %>% select(Ybar)`.  It's not surprising, of course, to find
+that the sample means are not equal.  Let's form a confidence interval via a pooled two-sample t-test:
+```{r}
+flightDataTB_ttest = flightDataTB  %>% 
+  select(ORIGIN, DAY_OF_MONTH, DEP_DELAY_NEW, DEP_DELAY) %>%
+  filter(ORIGIN == 'IAH' | ORIGIN == 'DFW')
+
+confint(lm(DEP_DELAY_NEW ~ ORIGIN, data = flightDataTB_ttest))
+```
+
+Of course, no statistical method should be applied without looking into the assumptions!  These are:
+
+* The observations are drawn from a normal distribution
+* The standard deviations are the same between the two groups
+* The observations are independent
+
+So, before we attempt to interpret these results, we need to make some plots. We will be using a very nice accessory package to dplyr: [ggplot2](https://r4ds.had.co.nz/data-visualisation.html "R for Data Science").  The package ggplot2 works again via a grammar, which is loosly like 'what am I plotting?' + 'what does the plot look like'?  I suggest you look at the suggested link to get familiar with ggplot2.
+
+```{r}
+ggplot(data = flightDataTB_ttest) + 
+  geom_point(mapping = aes(x = ORIGIN, y = DEP_DELAY_NEW))
+```
+
+This is somewhat helpful.  We can tell right away that the observations are positively skewed and hence not from a normal distribution.  Additionally, we can see that there was one
+flight that was particularly delayed from DFW.  Let's make a visualization based on a density estimator such as a histogram (see Figure 1.3 in APM for an example)
+
+```{r}
+ggplot(data = flightDataTB_ttest, mapping = aes(x = DEP_DELAY_NEW, fill = ORIGIN)) + 
+  geom_histogram(alpha=0.2, position="identity")
+```
+
+This is a count-based histogram.  It is usually better to look at the density (this just divides each count by the number of observation).  Also, let's pick a bigger binwidth
+
+```{r}
+ggplot(data = flightDataTB_ttest, mapping = aes(x = DEP_DELAY_NEW, y = ..density.., fill = ORIGIN)) + 
+  geom_histogram(alpha=0.2, position="identity",binwidth = 200)
+```
+
+What about the independence assumption?  Let's look at a plot over time for the month
+
+```{r}
+ggplot(data = flightDataTB_ttest, mapping = aes(x = factor(DAY_OF_MONTH), y = DEP_DELAY_NEW)) + 
+  geom_boxplot()
+```
+
+Not much to see here, maybe we can plot the median flight delay by day of month
+
+```{r}
+flightDataTB %>%
+  filter(ORIGIN == 'IAH' | ORIGIN == 'DFW') %>%
+  group_by(DAY_OF_MONTH) %>%
+  summarise(medDelay = median(DEP_DELAY_NEW, na.rm = TRUE)) %>%
+  ggplot(.) +
+    geom_point(mapping = aes(x = DAY_OF_MONTH, y = medDelay))
+```
+
+It's notable that two of the highest median delays occured on the first two days.  Perhaps it is related to weather or maybe the holiday? 

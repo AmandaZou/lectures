@@ -1,0 +1,95 @@
+---
+title: 'STAT656: Style Guide'
+subtitle: Introduction to Coding (in R)
+output:
+  html_document: default
+---
+# Introduction
+Let's define a couple of objects off of the famous Iris data set.
+```{r}
+X = iris$Sepal.Length
+Y = iris$Sepal.Width
+```
+
+# Naming conventions
+Use expressive names and a consistent scheme for naming variables. 
+
+I happen to prefer `Camel case', whereby objectNamesLookLikeThis
+```{r}
+leastSquaresFit     = lm(Y~X)
+betaHatLeastSquares = coef(leastSquaresFit)
+```
+There are other conventions, such as 
+
+* Pascal's case: LeastSquaresFit
+
+* Snake case: least_squares_fit
+
+* kebab case: least-squares-fit
+
+Classically, R has used a convention: `least.squares.fit'  Try not to use it, as it conflicts with other languages e.g. Python
+
+# Consistent spacing
+This means:
+
+* Indentation inside functions/loops
+* spaces between object names and assignment operator (`=')
+* comments should be indented to the code in which they appear (somewhat counterintuitive: limit the number of comments in your code)
+```{r}
+X          = iris$Sepal.Length
+Y          = iris$Sepal.width
+n          = length(X)
+runningSum = 0
+
+for(i in 1:n){
+  #each step grabs an element in X, squares it, and adds it to the running total
+  squaredEntry = X[i]**2
+  runningSum   = runningSum + squaredEntry
+}
+```
+
+# Simple over complex
+Tend to keep functions and lines of code doing one/few things.  For functions, include some meta data as to how the function works. 
+
+Let's look at writing a code for centering and scaling an array 
+```{r}
+columnScaleF = function(X){
+#### columnScaleF(X)
+####      Arguments: 
+####               * X is an n by p matrix which we are 
+####                  normalizing to have column sample
+####                  standard deviation equal to 1.
+  Xstd    = apply(X,2,sd)
+  Xscaled = t(t(X)/Xstd)
+  return( Xscaled )
+}
+columnCenterF = function(X){
+#### columnCenterF(X)
+####      Arguments: 
+####               * X is an n by p matrix which we are 
+####                  normalizing to have column sample
+####                  mean equal to zero.
+  XcenteringMatrix = apply(X,2,mean)
+  Xcentered        = t( t(X) - XcenteringMatrix)
+  return( Xcentered )
+}
+```
+Ideally, these two functions would be saved in separate files called 'columnCenter.r' and 'columnScale.r'  
+
+Then, we would have a third function
+
+```{r}
+scaleNewF = function(X,center=TRUE,scale=TRUE){
+#### scaleNew(X,center=TRUE,scale=TRUE)
+####      Arguments: 
+####               * X is an n by p matrix which we are 
+####                  normalizing to have either (or both) 
+####                  column sample mean equal to zero
+####                  or column sample sd equal to one.
+  source(columnCenter.r)
+  source(columnScale.r)
+  if(center) X = columnCenter(X)
+  if(scale)  X = columnScale(X)
+  return( X )
+}
+```

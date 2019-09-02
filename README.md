@@ -11,8 +11,9 @@ Date    | Slides
 --------|--------
 Aug. 26 | We went over the syllabus and gave a high level overview of what the course will entail.  Additionally, we defined some common terms/concepts that will be used throughout the course.
 Aug. 28 | We talked extensively about R, Rstudio, and R markdown, exploring the styleGuide and beginning to look at the introFlightExample
-Aug. 30 | We will continue looking at the introFlightExample file
-Sep. 02 |
+Aug. 30 | We continued looking at the introFlightExample file and the split-apply-combine paradigm as implemented in the Tidyverse
+Sep. 02 | We started Chapter 3 in APM.  We looked at the topics in chapters 3.1
+ and 3.2
 Sep. 04 |  
 Sep. 06 |  
 Sep. 09 |

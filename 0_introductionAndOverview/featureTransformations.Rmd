@@ -1,0 +1,440 @@
+---
+title: 'STAT656: Data processing.  Part 1'
+subtitle: Revisiting the segmentation data. APM chapters 3.1 to 3.3
+output:
+  html_document: default
+---
+
+# Introduction
+Making transformations is a an important part of analyzing a data set.  Let's look through an example from APM.
+
+Let's load in some packages and the example data set.
+```{r loadPackagesAndData}
+packs = c('dplyr','ggplot2','AppliedPredictiveModeling', 'e1071', 'caret')
+lapply(packs,require,character.only=TRUE)
+
+data(segmentationOriginal)
+```
+
+First, R scripts for generating the book can be found (after installing the package AppliedPredictiveModeling) here:
+
+```{r} 
+scriptLocation()
+```
+
+
+# Examining the data set
+
+Here, let's get an idea of the type and quantity of observations/measurements we have
+```{r EDA}
+dim(segmentationOriginal)
+is.data.frame(segmentationOriginal)
+
+table(sapply(segmentationOriginal[1,],class))
+str(segmentationOriginal)
+```
+
+So, we have 2 explicitly qualitative measurements, 49 numeric, and 68 integer (the integers might be either qual or quan)
+
+Since we are just looking at exploration, we won't need to worry about train/test split.  We will also remove the cell label.
+```{R removeTrainTest}
+segData = select(segmentationOriginal, -Case, -Cell)
+```
+
+Now, we need to treat qualitative integers as qualitative.  Here, we see that the integer variables with the 'Status' in the
+name are actually qualitative.  Let's use some regular expressions (regex).  The workhorse function is an old unix command [regex](https://www.rstudio.com/wp-content/uploads/2016/09/RegExCheatsheet.pdf).
+```{R qualToFactor}
+(variablesWithStatus = names(segData)[grep('Status',names(segData))])
+length(variablesWithStatus)
+#dplyr has functionality for doing just this as well, using regex under the hood
+segDataFactor        = mutate_at(segData,vars(matches('Status')), as.factor)
+
+str(segDataFactor)
+```
+
+
+Let's make a new object that just has the quantitative features, converting integer type to numeric
+```{r getQuantFeaturesOnly}
+segDataQuant = segData %>% 
+  select(-variablesWithStatus,-Class) %>%
+  mutate_all(as.numeric)
+
+str(segDataQuant)
+```
+
+
+
+
+# Transformations
+Let's make a quick example data set to fix ideas.
+
+```{r centerScale}
+X = data.frame('x1' = 1:10,'x2' = (1:10)*1000, 'x3' = rep(1,10), 'x4' = rnorm(10,1,.00001))
+X
+```
+
+## Variability check
+A good thing to check is that the features all exhibit some nontrivial variation.  Consider there being a feature that only takes on one value (that is, it is constant).  This feature wouldn't be informative and is just taking up space.  Hence, we should check and see if, among the numeric predictors, are any of them 'almost' constant.
+
+```{r variability}
+sdVec = apply(X,2,sd)
+X     = select_if(X,sdVec > 0.0001)
+        #select_if is to be used when selecting by a Boolean value e.g sdVec > 0.0001
+X
+```
+
+
+Alternatively, we can use the caret package. Let's get our first look at the caret package and use caret's preProcess function to compute the transformation and then apply it with the predict function.
+Using method = 'zv' removes features that are constant while method = 'nzv' will remove features that have minor variability.
+```{r variabilityCaret}
+X %>% preProcess(method = 'nzv') %>%
+  predict(newdata = X)
+```
+
+## Center/scale
+The most common transformation is to center/scale the features.  This looks like replacing each feature with a new feature so that the new feature has:
+
+* Sample mean equal to zero
+* Sample standard deviation equal to one
+
+Note that we would only want to center/scale quantitative features.  We can do this with dplyr
+```{r centerScaleDplyr}
+X %>% transmute('x1' = (x1 - mean(x1))/sd(x1), 'x2' = (x2 - mean(x2))/sd(x2)) 
+```
+
+We can again use the preProcess function in the caret package to do this computation.  The default transformation is to center and scale.  We will see another use of it in the next section.
+
+```{r centerScaleCaret}
+X %>% preProcess(.) %>%
+  predict(newdata = X)
+```
+
+## Skewness
+Other than center/scaling features, the second most common transformation is correcting for [skew](https://en.wikipedia.org/wiki/Skewness).  Only use skew-correcting transformations if the method(s) you are using assume(s) something like normally distributed observations (e.g. PCA, which we discuss next)
+
+If there aren't that many features, we can visually inspect them using a variety of plots e.g. scatter plots, QQ plots, ect.  When the number of features gets to be more than a dozen or so, making/interpreting plots becomes challenging/time consuming.  
+
+Let's instead compute the sample skewness.
+
+A quick comment, the book says "A general rule of thumb to consider is that skewed data whose ratio of the highest value to the lowest value is greater than 20 have significant skewness."  This is a strange statement to make as it is more of a variance statement than a skewness statement.  I wouldn't pay much attention to that recommendation.
+
+## Computing skewness
+```{r quantFeatureSkewness}
+skewnessVec = segDataQuant %>%
+  sapply(., e1071::skewness)
+
+names(segDataQuant)[abs(skewnessVec)> 2]
+```
+
+Let's take a look at a left skewed, unskewed, and right skewed feature.  Here, the [unlist](https://stat.ethz.ch/R-manual/R-devel/library/base/html/unlist.html) function just takes what is a data.frame and converts it to a vector.
+```{r examplePlot}
+negSkewExample = names(segDataQuant)[which.min(skewnessVec)]
+negSkew        = select(segDataQuant, negSkewExample) %>% unlist(.)
+
+lowSkewExample = names(segDataQuant)[which.min(abs(skewnessVec))]
+lowSkew        = select(segDataQuant, lowSkewExample) %>% unlist(.) 
+
+posSkewExample = names(segDataQuant)[which.max(skewnessVec)]
+posSkew        = select(segDataQuant, posSkewExample) %>% unlist(.)
+
+#using base R plotting
+par(mfrow = c(1,3))
+hist(negSkew, 
+     main = 'Negative skew',
+     xlab = negSkewExample)
+hist(lowSkew, 
+     main = 'Little skew', 
+     xlab = lowSkewExample)
+hist(posSkew,
+     main = 'Positive skew', 
+     xlab = posSkewExample)
+```
+
+
+## Correcting for skewness
+
+Note: my goal here is not to convey that all data analysis applications should start with 
+correcting for skewness.  The general take-away from making transformations is that they are like
+a prescription drug: they might have a benefit, but there are always side-effects.
+
+In this case, I ultimately want to apply Principal Components Analysis, and hence correcting for skewness is important
+due to a lurking normality assumption.
+
+We could manually seek to apply transformations, the most
+prominent one being the log transformation.  Note that the log transformation only works if:
+
+* There is positive skew
+* There are only positive values
+
+Let's take a look at the histograms after log transformations of the skewed features (adding 2 )
+```{r logTransform}
+par(mfrow = c(2,3))
+hist(negSkew, 
+     main = 'Negative skew',
+     xlab = negSkewExample)
+hist(lowSkew, 
+     main = 'Little skew', 
+     xlab = lowSkewExample)
+hist(posSkew,
+     main = 'Positive skew', 
+     xlab = posSkewExample)
+hist(log(negSkew), 
+     main = 'Negative skew',
+     xlab = negSkewExample)
+hist(lowSkew, 
+     main = 'Little skew', 
+     xlab = lowSkewExample)
+hist(log(posSkew + 2),
+     main = 'Positive skew', 
+     xlab = posSkewExample)
+```
+
+### Box-Cox and related transformation
+
+Instead of manually choosing transformations, there are automated ways.
+There are a few related transformations that follow the development of the field
+
+* Box-Tidwell (BT).  This transformation isn't used anymore.
+* Box-Cox (BC). Commonly used, but requires positive features/supervisor
+* Yeo-Johnson (YJ).  An extension of BC to a general feature.
+
+The main difference, for our purposes, is that the Yeo-Johnson transformation allows for non-positive
+entries.  If a feature is entirely positive, then BC and YJ are very similar.  
+
+Note: If you want to interpret (instead of make a prediction or interpret a different feature) the relationship between a feature and the supervisor, then don't use any of these transformations on that feature.
+
+Let's use caret's preProcess function to compute the transformation and then apply it with the predict function 
+```{r YJexampleCompute}
+negSkewExampleBoxCox = segDataQuant %>%
+  select(negSkewExample) %>%
+  preProcess(method  = 'BoxCox') %>%
+  predict(newdata    = segDataQuant %>% select(negSkewExample))
+posSkewExampleYJ     = segDataQuant %>%
+  select(posSkewExample) %>%
+  preProcess(method  = 'YeoJohnson') %>%
+  predict(newdata    = segDataQuant %>% select(posSkewExample))
+```
+
+Let's look at our skewness examples again:
+```{r YJexamplePlot}
+par(mfrow = c(2,3))
+hist(negSkew, 
+     main = 'Negative skew',
+     xlab = negSkewExample)
+hist(lowSkew, 
+     main = 'Little skew', 
+     xlab = lowSkewExample)
+hist(posSkew,
+     main = 'Positive skew', 
+     xlab = posSkewExample)
+negSkewExampleBoxCox %>%
+  unlist  %>% 
+  hist(.,main = 'Negative skew',
+       xlab = negSkewExample)
+hist(lowSkew, 
+     main = 'Little skew', 
+     xlab = lowSkewExample)
+posSkewExampleYJ %>%
+  unlist %>%
+  hist(main = 'Positive skew', 
+       xlab = posSkewExample)
+```
+
+
+Let's apply the YJ transformation to the quantitative features that exhibit skewness.  We will make
+another data.frame with the features that don't exhibit skewness.  This isn't mandatory, but it will make the the next block more readable.
+```{r YJtransform}
+skewnessCriterion    = abs(skewnessVec)> 1
+
+segDataQuantSkewedYJ = segDataQuant %>%
+  select_if(skewnessCriterion) %>%
+  preProcess(method = 'YeoJohnson') %>%
+  predict(segDataQuant %>% select_if(skewnessCriterion))
+
+segDataQuantNotSkewed = segDataQuant %>%
+  select_if(!skewnessCriterion)
+```
+
+Now, we can combine the transformed and not transformed quantitative variables into a data.frame
+
+```{r combineTransAndNotTrans}
+segDataQuantCombined = cbind(segDataQuantSkewedYJ, segDataQuantNotSkewed)
+```
+
+# Principal Components Analysis (PCA)
+
+PCA is an unsupervised transformation method that looks to reduce the number of dimensions of the feature matrix. Some comments about PCA
+
+* PCA can only be applied to numeric features
+
+* PCA presumes the data are somewhat normally distributed.  So, the YJ transformation makes sense here.
+* Just like the YJ/BC transformations, if you want to interpret the relationship between a specific feature and the supervisor, then don't apply PCA to it
+* Almost always, you will want to center/column scale any feature that you include in PCA (after
+correcting for skewness)
+* The resulting features will be (linear) combinations of the features included in the PCA and two PCs will be uncorrelated
+* Only try to apply PCA when p (the number of features) is much smaller than n (the number of observations)
+
+## Introduction and Intuition
+Let's look through a very simple simulation to see what is really going on with PCA.  Imagine that I have two features but I'm trying to only save only one feature and delete the other.  I need to pick which feature I want to delete.
+
+```{r simplePCAuncorrelated}
+n = 30
+p = 2
+X = rep(0,n*p)
+X = matrix(X,nrow=n,ncol=p)
+set.seed(15)
+x_1   = rnorm(n,0,1)
+x_2   = rnorm(n,0,.2)
+
+X[,1] = x_1
+X[,2] = x_2
+lims = c(-2, 2)
+
+par(mfrow=c(1,2))
+
+plot(X,xlim=lims,ylim=lims,xlab=expression(x[1]),ylab=expression(x[2]))
+points(X[,1],rep(0,n),col='red')
+plot(X,xlim=lims,ylim=lims,xlab=expression(x[1]),ylab=expression(x[2]))
+points(rep(0,n),X[,2],col='blue')
+```
+
+Now, let's add some correlation to the two features.  Note: understanding how I'm adding the correlation isn't part of this class.  If it looks confusing, it's fine to ignore it.
+```{r simplePCAcorrelated}
+theta     = -pi/5
+rot_mat   = matrix(c(cos(theta),-sin(theta),sin(theta),cos(theta)),nrow=2,byrow=T)
+X_rot     = X%*%rot_mat
+
+plot(X_rot,xlim=lims,ylim=lims,xlab=expression(x[1]),ylab=expression(x[2]))
+points(X_rot[,1],rep(0,n),col='red')
+plot(X_rot,xlim=lims,ylim=lims,xlab=expression(x[1]),ylab=expression(x[2]))
+points(rep(0,n),X_rot[,2],col='blue')
+```
+
+Let's compute the PCA of this data set and plot it.  Note: understanding how I'm computing the PCA via a matrix decomposition isn't a part of this class.  If it looks confusing, it's fine to ignore it. We will use 'prcomp' and 'preprocess' to do this later.
+
+```{r simplePCA}
+Xscale   = scale(X_rot)
+svd.out  = svd(X_rot)
+V        = svd.out$v
+PCcoords = svd.out$u %*% diag(svd.out$d)
+PCvecs1  = PCcoords[,1] %*% t(V[,1])
+PCvecs2  = PCcoords[,2] %*% t(V[,2])
+lims = c(min(X_rot), max(X_rot))
+
+plot(X_rot,xlim=lims,ylim=lims,xlab=expression(x[1]),ylab=expression(x[2]),asp=1)
+points(PCvecs1,col='red')
+points(PCvecs2,col='blue')
+legend(x = .75,y=-.25,col=c('black','red','blue'),pch=1,legend=c('Data','PC1 only','PC2 only'))
+```
+
+Conclusion: PCA estimates the intuitive notion that almost all the information is along the 'main axis' of the data.
+
+## Turtle example
+Let's introduce PCA by looking at a data set compiling of the measured dimensions 
+of turtles along with their gender.
+
+```{r loadTurtlesData}
+if(!require(ade4,quiet=TRUE))install.packages('ade4');require(ade4)
+data(tortues)
+pturtles        = tortues
+names(pturtles) = c("length", "width", "height", "gender")
+
+gender          = pturtles$gender
+genderCol       = ifelse(gender == "F", "pink", "blue")
+
+measures = pturtles[, 1:3]
+plot(measures, col = genderCol, pch = 19)
+```
+
+Let's compute the PCs via the 'prcomp' function.  Note that there is another function available called
+'princomp'.  This function is much less numerically stable and shouldn't be used.
+
+```{r turtleExamplePCA}
+shellPCA        = prcomp(measures,scale=TRUE,center=TRUE)
+```
+
+Notice that while there appears to be 3 features (measurements about the shell) they are all measuring the same underlying (i.e. latent) quantity: shell size.  Let's plot the first two PCs against each other and color the points by gender (to color in a plot, one way is to use a factor variable).  When plotting PCs versus each other, it is important to keep all the axes having the same range to keep from making spurious conclusions.
+
+
+```{r turtleExamplePCAplot}
+XtransformPC = data.frame(shellPCA$x)
+ggplot(data = XtransformPC, aes(x = PC1, y = PC2)) + 
+  geom_point(aes(color = factor(gender))) + 
+  coord_cartesian(xlim = range(XtransformPC$PC1), ylim = range(XtransformPC$PC1))
+```
+
+Interpretting this plot, there appears to be good separation between the gender classes. This indicates these two groups are in fact different.  Note that we can also do outlier detection.  For instance, there is a somewhat isolated point at the largest value of PC1:
+```{r outlier}
+filter(pturtles,XtransformPC$PC1 > 4)
+outlierColor = ifelse(XtransformPC$PC1 > 4, 'black','red')
+
+plot(measures, col = outlierColor, pch = 19)
+```
+
+### Scree plot
+If you notice from the plot of PC1 versus PC2, the scales of the PCs are different.  This is because,
+by definition, 
+
+* PC1 explains the most variation in the data set
+* PC2 explains the second most, subject to being uncorrelated with PC2
+* ...
+* PCp explains the least
+
+Note that for p features, there will alwyas be p PCs. If we keep all p PCs, then we haven't accomplished anything.  We need to retain strictly fewer than p PCs.  In order to choose the number
+of PCs in an unsupervised fashion, we can look at a 'scree plot'.  This plots the % variance explained by each PC
+```{r exampleScreePlot}
+screeplot(shellPCA,type='lines')
+```
+
+With the scree plot, either of two approaches can be taken:
+
+* Look for an 'elbow' in the scree plot, and choose the number of components that occurs below the elbow (one PC in this example)
+* Identify how much variation (say, 90% of the total variance) you'd like to explain and retain the number of components that achieves this.  A helpful function of getting cumulative sums is 'cumsum'
+
+```{r }
+totalVariance = sum(shellPCA$sdev**2)
+which.max(cumsum(shellPCA$sdev**2)/totalVariance > 0.9)
+```
+
+### Caret package again
+The caret package has built in functionality for doing PCA as well (note that it always picks at least two PCs.  So, in the example, it wouldn't choose the 1 PC solution.  This isn't typically a problem in practice). 
+```{r exampleCaretPCA}
+preProcess(measures, method = c('center','scale','pca'),
+           thresh = 0.99) %>%
+  predict(measures) %>%
+  dim(.)
+```
+
+
+## Back to the segmentation data
+As we're not interested in any particular feature, we can apply PCA to all of the (transformed) features inside the 'segDataQuantCombined' object. Note that you cannot apply PCA to qualitative features.
+
+```{R pcaComputation}
+segDataQuantCombinedPCA = prcomp(segDataQuantCombined, center = TRUE, scale = TRUE)
+```
+Let's look at the screen plot and the number of components necessary to retain 90% of the variance.  Note that 'scree plot' by default only plots 10 pcs.  We need more in this case and hence I've changed it to 20.
+
+```{r numberOfComponents}
+screeplot(segDataQuantCombinedPCA,type='lines',npcs = 20)
+
+totalVariance = sum(segDataQuantCombinedPCA$sdev**2)
+which.max(cumsum(segDataQuantCombinedPCA$sdev*2)/totalVariance > 0.9)
+cumsum(segDataQuantCombinedPCA$sdev*2)/totalVariance
+```
+
+```{r PCAplot, cache = TRUE}
+segDataQuantCombinedPCA_df = data.frame(segDataQuantCombinedPCA$x)
+ggplot(data = segDataQuantCombinedPCA_df, aes(x = PC1, y = PC2)) + 
+  geom_point(aes(color = factor(segmentationOriginal$Class))) + 
+  coord_cartesian(xlim = range(segDataQuantCombinedPCA_df$PC1), 
+                  ylim = range(segDataQuantCombinedPCA_df$PC1))
+```
+
+There does appear to be some separation here among the two classes. However, the first two PCs only explain about 25% of the variation, so there is still a lot of information in the next 11 or so PCs.
+
+
+# Saving objects for later
+```{r saveObj}
+save(segDataFactor, file = 'segDataFactor.Rdata')
+save(segDataQuantCombined, file = 'segDataQuantCombined.Rdata')
+```

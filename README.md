@@ -13,10 +13,10 @@ Aug. 26 | We went over the syllabus and gave a high level overview of what the c
 Aug. 28 | We talked extensively about R, Rstudio, and R markdown, exploring the styleGuide and beginning to look at the introFlightExample
 Aug. 30 | We continued looking at the introFlightExample file and the split-apply-combine paradigm as implemented in the Tidyverse
 Sep. 02 | We started Chapter 3 in APM.  We looked at the topics in chapters 3.1 and 3.2
-Sep. 04 |  
-Sep. 06 |  
-Sep. 09 |
-Sep. 11 |
+Sep. 04 | We finished looking at Chapter 3 in APM, though we will defer the discussion of dummy variables a bit.
+Sep. 06 | We discussed the ideas behind data splitting and resampling.  We gave a thorough discussion of the bootstrap
+Sep. 09 | We covered the implementation of R of data splitting and resampling given by the package caret
+Sep. 11 | Gave a brief overview of parallelism.
 Sep. 13 |
 Sep. 16 |
 Sep. 18 |

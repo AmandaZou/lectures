@@ -16,9 +16,9 @@ Sep. 02 | We started Chapter 3 in APM.  We looked at the topics in chapters 3.1 
 Sep. 04 | We finished looking at Chapter 3 in APM, though we will defer the discussion of dummy variables a bit.
 Sep. 06 | We discussed the ideas behind data splitting and resampling.  We gave a thorough discussion of the bootstrap
 Sep. 09 | We covered the implementation of R of data splitting and resampling given by the package caret
-Sep. 11 | Gave a brief overview of parallelism.
-Sep. 13 |
-Sep. 16 |
+Sep. 11 | Gave a brief overview of parallelism.  Started discussing how to judge performance in regression models
+Sep. 13 | Continued our discussion of judging performance, this time with classification models
+Sep. 16 | We covered sensitivity/specificity/precision/recall and adjusting the probability threshold for turning probability estimates into classifications
 Sep. 18 |
 Sep. 20 |
 Sep. 23 |

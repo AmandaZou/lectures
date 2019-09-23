@@ -1,0 +1,224 @@
+---
+title: 'STAT656: Workshop on Multiple Linear Regression'
+output:
+  html_document: default
+---
+
+# Loading objects and data
+
+```{r loadPackagesAndData}
+packs = c('dplyr','ggplot2', 'caret','corrplot', 'e1071','readr')
+lapply(packs,require,character.only=TRUE)
+
+dataSet = read_csv('linearRegressionWorkShop_data.csv')
+Y       = select(dataSet,Y) %>% unlist()
+X       = select(dataSet,-Y)
+```
+
+# Exploratory analysis
+
+What are some things to check, and what is a reasonable order to check for them?
+
+#### Answer
+
+
+## Data structures
+```{r}
+str(X)
+sapply(X,function(x){ length(unique(x)) })
+```
+
+#### Answer
+
+## Missing values
+
+
+Let's look for missing values
+
+```{r}
+#### answer
+```
+
+Let's visualize them with the following function:
+```{r}
+ggplot_missing <- function(x){
+	if(!require(reshape2)){warning('you need to install reshape2')}
+	require(reshape2)
+	require(ggplot2)
+	#### This function produces a plot of the missing data pattern
+	#### in x.  It is a modified version of a function in the 'neato' package
+  
+  x %>% 
+    is.na %>%
+    melt %>%
+    ggplot(data = .,
+           aes(x = Var2,
+               y = Var1)) +
+    geom_raster(aes(fill = value)) +
+    scale_fill_grey(name = "",
+                    labels = c("Present","Missing")) +
+    theme_minimal() + 
+    theme(axis.text.x  = element_text(angle=45, vjust=0.5)) + 
+    labs(x = "Variables in Dataset",
+         y = "Rows / observations")
+}
+ggplot_missing(X)
+```
+
+```{r}
+X = select(X,-####Answer)
+```
+
+Now, we can impute the remaining missing values.  We can impute with 'preProcess'
+
+```{r}
+XimputeMedian = preProcess(X, method = 'medianImpute', k = 5)
+Ximpute       = ####
+anyNA(Ximpute)
+```
+
+## Back to data structures
+We should convert the qualitative features to factors
+
+```{r}
+Xqual       = Ximpute %>% select(x1:x4) %>% ####
+Xquan       = Ximpute %>% select(-(x1:x4)) 
+```
+
+Now, these need to be converted to dummy variables for multiple linear regression
+
+```{r}
+dummyModel = ####
+XqualDummy = predict(dummyModel, Xqual)
+```
+
+
+## Extreme observations and Skewness
+
+We should always be on the look out for extreme observations.  Checking skewness and extreme observations are intertwined.  We will check for skewness first
+
+```{r}
+skewed = apply(Xquan,2,skewness)
+skewed
+```
+
+It looks like there are a few heavily skewed features.
+
+```{r}
+####
+```
+
+Let's plot one of these skewed features before and after transformation
+
+```{r}
+plotData = data.frame('x6skewed' = Xquan$x6, 'x6unskewed' = XquanYeoJ$x6)
+plotData %>% ggplot() +
+  geom_histogram(aes(x=x6skewed, y = ..density..), alpha = 0.5,  fill = 'blue') + 
+  geom_histogram(aes(x = x6unskewed,  y = ..density..), alpha = 0.5, color = 'red')
+```
+
+
+Let's check for extreme observations via PCA
+
+```{r}
+pcaOut          = prcomp(XquanYeoJ,scale=TRUE,center=TRUE)
+XquanYeoJscores = data.frame(pcaOut$x)
+ggplot(data = XquanYeoJscores) + 
+  geom_point(aes(x = PC1, y = PC2))
+```
+
+Woah! We have an extreme observation for sure. Let's take a look:
+
+```{r}
+extremeObs = which.min(XquanYeoJscores$PC1)
+X[extremeObs,]
+plot(X$x11, X$x12)
+```
+It looks like an issue with the databasing, we will go ahead and remove that observation. We can either attempt to impute the values (by setting the infeasible values to NA) or remove the observation.  Let's remove the observation 
+
+(here, I'm just going to remove it now so as to not overly complicate the Rmd file.  But it would be a good idea to go back and remove the observation from the beginning.  )
+
+```{r}
+Xfull = cbind(XquanYeoJ,XqualDummy)[-30,]
+Yno30 = Y[-30]
+
+if(nrow(Xfull) != length(Yno30)){ warning('Something bad happened with removing that observation')}
+```
+
+# Correlation filtering
+
+```{r}
+corrplot(cor(#### %>% select(-contains('.'))), order = "hclust", tl.cex = .35)
+```
+
+It looks like there are two features that a quite correlated.  We can use the correlation filtering
+
+```{r}
+highCorr = #### %>% Identify the feature(s) for removal
+  findCorrelation(.8, names = TRUE) 
+
+XfullCorrFilter = #### Remove the identified feature
+```
+
+Now, let's compute the apparent error, CV error, and test error.  To compute the test error, let's make a training/test split with 75/25 training/test:
+
+```{r}
+set.seed(1)
+trainIndex = ####
+
+
+Xtrain = ####
+Ytrain = ####
+
+Xtest = ####
+Ytest = ####
+```
+
+#### Fit the multiple,linear regression
+```{r}
+trControl = trainControl(method = 'cv', number = 10)
+lmOut     = train(x = Xtrain, y = Ytrain, method = "lm",
+                  trControl = trControl)
+```
+
+#### Training error:
+
+```{r}
+Yhat = predict(lmOut, newdata = Xtrain)
+mean(Yhat - Ytrain) ##oops, what happened?  What result did we get? 
+#### What should we do instead?
+```
+
+#### Test error
+
+```{r}
+YhatTest = ####
+```
+
+#### CV estimate of test error
+
+```{r}
+mean(lmOut$resample$RMSE**2)
+```
+
+Let's get a residual plot:
+
+```{r}
+residuals        = Ytrain - Yhat
+residualPlotData = data.frame(residuals, Yhat)
+ggplot(data = residualPlotData) + 
+    geom_point(aes(x = Yhat, y = residuals)) + 
+    geom_hline(yintercept = 0, color = 'red')
+```
+
+#### Answer
+
+How do these residuals look?
+
+We can also compute the R^2
+
+```{r}
+SSE = sum( (Yhat - Ytrain)**2 )
+TSS = sum( (mean(Ytrain) - Ytrain)**2 )
+1 - SSE/TSS
+```

@@ -19,10 +19,10 @@ Sep. 09 | We covered the implementation of R of data splitting and resampling gi
 Sep. 11 | Gave a brief overview of parallelism.  Started discussing how to judge performance in regression models
 Sep. 13 | Continued our discussion of judging performance, this time with classification models
 Sep. 16 | We covered sensitivity/specificity/precision/recall and adjusting the probability threshold for turning probability estimates into classifications
-Sep. 18 |
-Sep. 20 |
-Sep. 23 |
-Sep. 25 |
+Sep. 18 | We covered ROC and AUC and adjusting the probability threshold
+Sep. 20 | We talked about an multiple linear regression
+Sep. 23 | In class workshop on multiple linear regression
+Sep. 25 | We began talking about logistic regression
 Sep. 27 |
 Sep. 30 |
 Oct. 02 |

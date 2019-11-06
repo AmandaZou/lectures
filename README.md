@@ -23,25 +23,25 @@ Sep. 18 | We covered ROC and AUC and adjusting the probability threshold
 Sep. 20 | We talked about an multiple linear regression
 Sep. 23 | In class workshop on multiple linear regression
 Sep. 25 | We began talking about logistic regression
-Sep. 27 |
-Sep. 30 |
-Oct. 02 |
-Oct. 04 |
-Oct. 07 |
-Oct. 09 |
-Oct. 11 |
-Oct. 14 |
-Oct. 16 | Midterm from 6:00 pm to 8:00 pm in BLOC 149
-Oct. 18 |
-Oct. 21 |
-Oct. 23 |
-Oct. 25 |
-Oct. 28 |
-Oct. 30 |
-Nov. 01 |
-Nov. 04 |
-Nov. 06 |
-Nov. 08 |
+Sep. 27 | Judging performance of classifiers
+Sep. 30 | Logistic regression and Linear Disciminant Analysis (LDA)
+Oct. 02 | Logistic regression and LDA examples including dummy variables, ROC curves, confusion matrices and interpretting results
+Oct. 04 | Introduction to penalization via ridge regression
+Oct. 07 | Lasso and elastic net regression
+Oct. 09 | Examples in R of elastic net and feature importance
+Oct. 11 | Elastic logistic net
+Oct. 14 | Midterm Review
+Oct. 16 | Examples of elastic net and making transformations [Midterm from 6:00 pm to 8:00 pm in BLOC 149]
+Oct. 18 | Sparse matrices, the active set, and refitted lasso
+Oct. 21 | Overview of neural networks
+Oct. 23 | No class
+Oct. 25 | More details on neural networks including multiple layers, activation function, starting values, and representations
+Oct. 28 | Multivariate Adaptive Regression Splines (MARS)
+Oct. 30 | Multivariate Adaptive Classification Splines and neural networks in R
+Nov. 01 | Robust regression and Support Vector Machines
+Nov. 04 | Support vector machines and classification
+Nov. 06 | Example of SVMs in R
+Nov. 08 | K-nearest neighbors
 Nov. 11 |
 Nov. 13 |
 Nov. 15 |
@@ -52,5 +52,5 @@ Nov. 25 |
 Nov. 27 | Reading day, no class
 Nov. 29 | Thanksgiving, no class
 Dec. 02 | 
-Dec. 04 | 
+Dec. 04 | Review for Final 
 Dec. 11 | Final, 10:30 to 12:30 pm

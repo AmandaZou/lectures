@@ -1,0 +1,271 @@
+---
+title: 'Logistic Regression and Linear Discriminant Analysis'
+subtitle: Classification with Logistic Regression and LDA
+output:
+  html_document: default
+---
+
+```{r loadingPackages}
+require(dplyr)
+require(readr)
+require(caret)
+require(pROC)
+
+load('../../../data/2018flights.Rdata')
+flightsNotCancelled = df %>%
+  filter(CANCELLED == 0) %>%
+  na.omit
+
+# Let's clean up the name space to free up memory
+rm(df)
+```
+
+Let's create a training/test split and relabel the supervisor to have more expressive level names:
+
+```{r}
+Y                 = flightsNotCancelled$DEP_DEL15
+set.seed(2)
+trainingDataIndex = createDataPartition(Y, p=.5, list = FALSE)
+trainingData      = flightsNotCancelled[trainingDataIndex,]
+testingData       = flightsNotCancelled[-trainingDataIndex,]
+
+Xtrain = select(trainingData, -DEP_DEL15)
+Xtest  = select(testingData, -DEP_DEL15)
+Ytrain = factor(select(trainingData, DEP_DEL15) %>% unlist(), labels = c('ontime','delay'))
+Ytest  = factor(select(testingData, DEP_DEL15) %>% unlist(), labels = c('ontime','delay'))
+
+rm(trainingData)
+rm(testingData)
+```
+
+I want to be able to predict whether there is a departure delay based on the month and the carrier:
+
+
+```{r}
+Xtrain = select(Xtrain, MONTH, OP_UNIQUE_CARRIER) %>% mutate_all(factor)
+Xtest  = select(Xtest, MONTH, OP_UNIQUE_CARRIER) %>% mutate_all(factor)
+
+str(Xtrain) 
+#Note: we can put the number of unique values with the data structure:
+sapply(Xtrain, levels)
+sapply(Xtest, levels)
+```
+
+
+## 0.3 Dummy variables
+
+```{r}
+dummyModel = dummyVars(~ ., data = Xtrain, fullRank = TRUE)
+
+XtrainFull = predict(dummyModel, Xtrain)
+XtestFull  = predict(dummyModel, Xtest)
+```
+
+
+# Logistic Regression 
+
+Let's go through and make a predictive model out of logistic regression and also look at the estimate coefficients.
+Remember to:
+
+* trainControl to only train the model by setting method = 'none'
+* make sure 'train' treats the first level as the event of interest, which is in alphabetical order.  So, 'no' would be the event.  However, we usually want to code results so that the outcome of interest is the event. We can make this adjustment in R via 'relevel' on the supervisor
+
+```{r}
+YtrainRelevel = relevel(Ytrain, ref = 'delay')
+YtestRelevel  = relevel(Ytest, ref = 'delay')
+
+trControl    = trainControl(method = 'none')
+outLogistic  = train(x = XtrainFull, y = YtrainRelevel, 
+                   method = 'glm', trControl = trControl)
+```
+
+
+Let's look at how well calibrated the probabilities are:
+```{r}
+YhatTestProb = predict(outLogistic, XtestFull, type = 'prob')
+calibProbs = calibration(YtestRelevel ~ YhatTestProb$delay, cuts = 5)
+xyplot(calibProbs)
+```
+
+```{r}
+sum(YhatTestProb$delay > .4)
+```
+The smaller values of the probability estimates are well calibrated.  However, we don't predict any probabilities larger than around 0.35.  This isn't an indication of poor model; hopefully there isn't a large probability of a delay!
+
+# Getting classifications
+
+Let's get some classifications.  Of course, the default threshold (0.5) won't work.  So, let's directly look at the ROC curve
+
+```{r}
+rocCurve = roc(Ytest, YhatTestProb$delay)
+plot(rocCurve, legacy.axes=TRUE)
+```
+
+This ROC curve doesn't look as good as others we have seen thus far. This is undoubtably a more difficult classification problem.  The area under the curve (AUC) reinforces the plot with a one number summary
+
+```{r}
+rocCurve$auc
+```
+
+```{r}
+thresholds = rocCurve$thresholds
+
+sort(thresholds)[1:3]
+sort(thresholds, decreasing = TRUE)[1:3]
+
+```
+
+Notice that the threshold only varies in a sensible range based on the probability estimates.  Let's find the threshold that results in a sensitivity of .5.
+
+
+```{r}
+pt5         = which.min(rocCurve$sensitivities >= 0.5)
+threshold   = thresholds[pt5]
+specificity = rocCurve$specificities[pt5]
+sensitivity = rocCurve$sensitivities[pt5]
+```
+
+The sensitivity for this choice is `r sensitivity` and the specificity is `r specificity`.
+
+Let's get the classifications for this threshold
+
+```{r}
+YhatTestThresh = ifelse(YhatTestProb$delay > threshold,
+                           'delay', 'ontime')  %>%
+     as.factor %>%
+     relevel(ref = 'delay')
+```
+
+We can just look at the generic output for the confusionMatrix function:
+
+```{r}
+confusionMatrixOut = confusionMatrix(reference = YtestRelevel, data = YhatTestThresh)
+confusionMatrixOut
+```
+
+Printing all this output is bad form as we should only be including things that we are interested in.  We can grab a subset of the out via selecting individual objects:
+```{r}
+print(confusionMatrixOut$table)
+
+print(confusionMatrixOut$overall[1:2])
+
+print(confusionMatrixOut$byClass[1:2])
+```
+
+
+
+# Linear Discriminant Analysis (LDA) 
+
+Let's do the same thing for LDA.  One of the benefits of the caret package is the code should be nearly identical. 
+
+
+```{r}
+trControl = trainControl(method = 'none')
+outLDA    = train(x = XtrainFull, y = YtrainRelevel, 
+                  method = 'lda', trControl = trControl)
+```
+
+Now, we will run through the same steps as above, but this time for LDA
+
+```{r}
+YhatTestProb = predict(outLDA, XtestFull, type = 'prob')
+```
+
+A calibration plot:
+
+```{r}
+calibProbs = calibration(YtestRelevel ~ YhatTestProb$delay, cuts = 5)
+xyplot(calibProbs)
+```
+
+The ROC curve and AUC
+
+```{r}
+rocCurve = roc(Ytest, YhatTestProb$delay)
+plot(rocCurve, legacy.axes=TRUE)
+
+rocCurve$auc
+```
+
+
+
+Let's again get the classifier with 0.5 test sensisitivity
+```{r}
+thresholds = rocCurve$thresholds
+
+pt5         = which.min(rocCurve$sensitivities > 0.5)
+threshold   = thresholds[pt5]
+specificity = rocCurve$specificities[pt5]
+sensitivity = rocCurve$sensitivities[pt5]
+```
+
+The specificity is `r specificity`.
+
+Let's get the classifications for this threshold
+
+```{r}
+YhatTestThresh = ifelse(YhatTestProb$delay > threshold,
+                           'delay', 'ontime')  %>%
+     as.factor %>%
+     relevel(ref = 'delay')
+```
+
+
+A confusion matrix:
+
+```{r}
+confusionMatrixOut = confusionMatrix(reference = YtestRelevel, data = YhatTestThresh)
+
+print(confusionMatrixOut$table)
+
+print(confusionMatrixOut$overall[1:2])
+
+print(confusionMatrixOut$byClass[1:2])
+```
+
+
+# Interpreting results
+
+Reminder: we can interpret the underlying model of logistic regression as:
+
+* 'A one unit change in x_j is associated with a beta_j change in the log odds that Y = C_1, holding all other features constant'
+
+or
+
+* 'A one unit change in x_j is associated with a multiplicative exp{beta_j} change in the odds that Y = C_1, holding all other features constant'
+
+Let's do an example.  Suppose I'm interested in the carrier 'AA' (American airlines).  We can look at the relationship between delay and this carrier via logistic regression
+
+```{r}
+betaHat = outLogistic$finalModel$coefficients
+betaHat
+```
+
+So, the relevant part is:
+```{r}
+betaHatAA = betaHat[13]
+exp(betaHat[13])
+```
+
+Of course, it doesn't make sense to think of a 'one unit change' in an airline.  The interpretation of the parameter will be relative to the left out category for the dummy variable (this will by default be the first level alphabetically)
+
+```{r}
+levels(Xtrain$OP_UNIQUE_CARRIER)
+```
+
+So, in this case, it would be '9E' (whatever that is).  So, for instance,
+
+'We estimate that flying with AA has an `r exp(betaHatAA)` times smaller odds of a 15 minute delay than 9E, holding all other features constant'
+
+Note that we can look at differences between two levels as well:
+
+
+```{r}
+betaHatJuly = betaHat[7]
+betaHatOct  = betaHat[10]
+exp(betaHatJuly)
+exp(betaHatOct)
+exp(betaHatJuly - betaHatOct)
+```
+
+'We estimate that flying in July has an `r exp(betaHatJuly - betaHatOct)` times smaller odds of a 15 minute delay than flying in October, holding all other features constant'

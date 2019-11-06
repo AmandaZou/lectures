@@ -1,0 +1,248 @@
+---
+title: 'Elastic Net Regression'
+output:
+  html_document: default
+---
+
+# Regression
+
+```{r}
+require(dplyr)
+require(caret)
+require(glmnet)
+require(corrplot)
+```
+
+Let's look at the `Hitters` dataset from the `ISLR` package to to get some more regression experience with  **elastic net**
+
+```{r}
+data(Hitters, package = "ISLR")
+
+Ytrain = Hitters %>% 
+  filter(!is.na(Hitters$Salary)) %>% 
+  select(Salary) %>% 
+  unlist(.)
+
+XtrainDF = Hitters %>% 
+  filter(!is.na(Hitters$Salary)) %>% 
+  mutate('average' = Hits/AtBat, 'careerAvg' = CHits/CAtBat) %>%
+  select(-Salary,-Division,-League,-NewLeague,-Hits,-AtBat, -CHits,-CAtBat) %>%
+  mutate_all(as.numeric)
+
+Xtrain = XtrainDF %>% as.matrix(.)
+```
+
+Let's look at what we have
+
+```{r}
+dim(Xtrain)
+```
+
+We can take a look at an estimate of the distribution of the supervisor:
+
+
+```{r}
+histogram(Hitters$Salary, xlab = "Salary, $1000s")
+```
+
+This is likely going to be a case in which the supervisor (Salary) should be transformed.  
+
+Let's look at the correlation structure of the features:
+
+```{r}
+Xcor = cor(Xtrain)
+corrplot(Xcor)
+```
+
+
+Looks like we have some correlated features.  Let's estimate an elastic net model, and choose the tuning parameters alpha/lambda via minimizing K-fold CV.
+
+
+Let's specify a CV trainControl.  We want K to be large enough so that the training set size is adequate.
+
+```{r}
+set.seed(1)
+K    = 25
+trainControl = trainControl(method = "cv", number = K)
+```
+
+We then use `train()` with `method = "glmnet"` which is actually fitting the elastic net.
+
+```{r}
+elasticOut = train(x = Xtrain, y = Ytrain,
+                   method = "glmnet", trControl = trainControl)
+```
+
+Also note that we have allowed `caret` to choose the tuning parameter grid for us.
+
+```{r}
+elasticOut
+```
+
+This is using an automatically allocated grid of alpha/lambda values, with alpha =  `0.10`, `0.55`, and `1`. `caret` doesn't use alpha = 0 by default in order to make sure the solution encourages some of the coefficients to be zero.  Let's look at the selected model.  It is just as easy, in my opinion, to refit with glmnet 
+
+```{r elasticNet}
+glmnetOut      = glmnet(x = Xtrain, y = Ytrain, alpha = elasticOut$bestTune$alpha)
+betaHat_glmnet = coef(glmnetOut, s = elasticOut$bestTune$lambda)
+```
+
+Let's take a look at the residuals
+
+```{r residuals}
+YhatTrain_glmnet = predict(glmnetOut, Xtrain,  s = elasticOut$bestTune$lambda)
+plot(YhatTrain_glmnet, Ytrain - YhatTrain_glmnet, 
+     xlab = 'Training predictions', ylab = 'Residuals')
+```
+
+A definite pattern in the residuals.  Let's take a look at transforming our supervisor
+
+```{r logSupervisor}
+YtrainLog  = log(Ytrain)
+tuneGrid   = expand.grid('alpha'=c(0,.25,.5,.75,1),'lambda'=seq(0.001, .2, length.out = 30))
+elasticOut = train(x = Xtrain, y = YtrainLog,
+                   method = "glmnet", trControl = trainControl,
+                   tuneGrid = tuneGrid)
+elasticOut$bestTune
+
+glmnetOut        = glmnet(x = Xtrain, y = YtrainLog, alpha = elasticOut$bestTune$alpha)
+betaHat_glmnet   = coef(glmnetOut, s = elasticOut$bestTune$lambda)
+YhatTrain_glmnet = predict(glmnetOut, Xtrain,  s = elasticOut$bestTune$lambda)
+plot(YhatTrain_glmnet, YtrainLog - YhatTrain_glmnet,
+     xlab = 'Training predictions', ylab = 'Residuals')
+```
+
+These residuals look a lot better.  Let's have a look at those extreme observations:
+
+```{r extremeObs}
+residuals = YtrainLog - YhatTrain_glmnet
+largeResidual = order(residuals, decreasing = TRUE)[1:2]
+
+Xtrain[largeResidual,]
+
+pcaOut = prcomp(Xtrain)
+colors = rep('blue',nrow(Xtrain))
+colors[order(residuals)[1:2]] = 'red'
+plot(pcaOut$x[,1:2],col = colors, asp=1)
+```
+
+Perhaps there is an extreme point, but not one of the large residuals.  Let's keep track of the extreme observation from the PCA plot (we won't need it for this investigation, but it is good practice)
+
+```{r}
+largePCA = which.max(pcaOut$x[,1])
+Xtrain[largePCA,]
+```
+
+Let's take a look at what features were selected by the model
+
+```{r}
+betaHat_glmnet
+```
+
+We can additionally look at the residuals as a function of each feature.  Here, we are looking for obvious remaining structure or other oddities
+
+```{r}
+pairs(cbind(Xtrain,residuals), cex=.1, pch=16, gap = .1)
+```
+
+```{r}
+plot(XtrainDF$Years, residuals )
+```
+
+There is a definite pattern here.  Let's go ahead and add a transformation to the model: years squared
+
+```{r logSupervisorYearsSquared}
+XtrainDF = XtrainDF %>%
+  mutate('yearsSq' = Years^2) 
+
+Xtrain = XtrainDF %>% as.matrix(.)
+
+tuneGrid   = expand.grid('alpha'=c(0,.25,.5,.75,1),
+                         'lambda' = seq(0.0001, .2, length.out = 30))
+
+elasticOut = train(x = Xtrain, y = YtrainLog,
+                   method = "glmnet", trControl = trainControl,
+                   tuneGrid = tuneGrid)
+elasticOut$bestTune
+
+glmnetOut        = glmnet(x = Xtrain, y = YtrainLog, alpha = elasticOut$bestTune$alpha)
+betaHat_glmnet   = coef(glmnetOut, s = elasticOut$bestTune$lambda)
+YhatTrain_glmnet = predict(glmnetOut, Xtrain,  s = elasticOut$bestTune$lambda)
+par(mfrow= c(1,2))
+residuals = YtrainLog - YhatTrain_glmnet
+plot(YhatTrain_glmnet, residuals,
+     xlab = 'Training predictions', ylab = 'Residuals')
+```
+
+```{r}
+betaHat_glmnet
+```
+
+Hmm, unexpected the coefficient on average looks a bit fishy.  Let's take a closer look:
+```{r}
+plot(XtrainDF$average, residuals,xlab = 'average', ylab = 'residuals')
+```
+
+Clearly, there is an issue with this observation:
+```{r}
+Xtrain[which.min(XtrainDF$average),]
+```
+
+This player has barely played, both this year and in his career.  Let's remove this observation and refit.
+
+```{r}
+XtrainDFremObs  = XtrainDF[-which.min(XtrainDF$average),] 
+YtrainLogRemObs = YtrainLog[-which.min(XtrainDF$average)]
+XtrainRemObs    = XtrainDFremObs %>% as.matrix(.)
+
+tuneGrid   = expand.grid('alpha'=c(0,.25,.5,.75,1),'lambda' = seq(0.0001, .2, length.out = 30))
+elasticOut = train(x = XtrainRemObs, y = YtrainLogRemObs,
+                   method = "glmnet", trControl = trainControl,
+                   tuneGrid = tuneGrid)
+elasticOut$bestTune
+
+glmnetOut        = glmnet(x = XtrainRemObs, y = YtrainLogRemObs, alpha = elasticOut$bestTune$alpha)
+betaHat_glmnet   = coef(glmnetOut, s = elasticOut$bestTune$lambda)
+YhatTrain_glmnet = predict(glmnetOut, XtrainRemObs,  s = elasticOut$bestTune$lambda)
+
+residuals = YtrainLogRemObs - YhatTrain_glmnet
+plot(YhatTrain_glmnet, residuals,
+     xlab = 'Training predictions', ylab = 'Residuals')
+```
+
+```{r}
+betaHat_glmnet
+corrplot(Xcor)
+```
+
+# Interpretation
+
+We need to remember how to interpret these results.  We have log transformed the supervisor, so this complicates the interpretation a bit.  But, we can still say how each feature is associated with the supervisor **holding all other features constant**
+
+This last part is crucial.  The negative sign on the estimated coefficient for average indicates that holding all the other features constant (say, ability to score runs), we estimate a negative association between average and Salary. 
+
+This is an `observational` study.  This means that we can only infer associate, not causation.  This is such an important point that it is sometimes overlooked. Example:
+
+Suppose I am a sports agent.  I have a player who comes up to me and asks: should I try to hit for average or for runs? I turn to my handy coefficient estimates and I say: runs, of course.  What is wrong with this statement?
+
+# Predictions
+```{r predictions}
+XtestDF = Hitters %>% 
+  filter(is.na(Hitters$Salary)) %>% 
+  mutate('average' = Hits/AtBat, 'careerAvg' = CHits/CAtBat) %>%
+  select(-Salary,-Division,-League,-NewLeague,-Hits,-AtBat, -CHits,-CAtBat) %>%
+  mutate_all(as.numeric) %>%
+  mutate('yearsSq' = Years^2) 
+
+Xtest = XtestDF %>% as.matrix(.)
+YhatTest_glmnet = predict(glmnetOut, Xtest,  s = elasticOut$bestTune$lambda)
+```
+
+We can convert these predictions to the original scale via exponentiation
+
+```{r}
+plot(XtestDF$Years, exp(YhatTest_glmnet), pch = 16,
+     ylab = 'Salary')
+points(XtrainDF$Years, Ytrain, col = 'red')
+```
+
+These predictions seem reasonable (there isn't any way to check; this is what it will be like in the real world!)

@@ -1,0 +1,101 @@
+---
+title: 'Logistic Elastic Net'
+output:
+  html_document: default
+---
+
+
+```{r}
+require(dplyr)
+require(caret)
+require(glmnet)
+require(pROC)
+```
+
+# Classification
+
+
+Let's look at the familiar `Default` dataset, which we first test-train split.
+
+```{r}
+data(Default, package = "ISLR")
+```
+
+```{r}
+set.seed(1)
+trainIndex = createDataPartition(Default$default, p = 0.25, list = FALSE)
+Y          = select(Default, default) %>% unlist(.)
+Xdf        = select(Default, -default) 
+Ytrain     = Y[trainIndex]
+Ytest      = Y[-trainIndex]
+```
+
+We will need to create dummy variables.  Also, since we have a lot of observations (`r nrow(Default)`) and few features (`r ncol(Default)`), I will create some additional model flexibility by adding some polynomial terms.  This might help prediction, and if not, we are using penalized methods and these additional features will be selected out.
+
+I will use `model.matrix` to do both (it is the function that is called by `dummyVars`).  I included the dummyVars syntax just for reference.
+
+```{r}
+#dummyVarsOut = dummyVars(~.,data = Xdf, fullRank = TRUE)
+#X            = predict(dummyVarsOut, Xdf)
+X      = model.matrix(~.^2, data = Xdf)
+
+XnoInt = X[,-1] 
+Xtrain = XnoInt[trainIndex,]
+Xtest  = XnoInt[-trainIndex,]
+```
+
+Let's fit some logistic elastic net models
+
+```{r}
+set.seed(1)
+K            = 10
+trainControl = trainControl(method = "cv", number = K)
+tuneGrid     = expand.grid('alpha'=c(0,.25,.5,.75,1),'lambda' = seq(0.000001, .001, length.out = 30))
+
+elasticOut = train(x = Xtrain, y = Ytrain,
+                   method = "glmnet", 
+                   trControl = trainControl, tuneGrid = tuneGrid)
+elasticOut$bestTune
+```
+
+Let's get the fitted model and grab the CV minimizing solution.  We can do this via refitting with glmnet (note that we have to specify that we want to do logistic by setting `family = 'binomial'`.  Also, make sure that the feature matrix is a `matrix` data structure and the supervisor is a `factor`):
+
+```{r}
+glmnetOut      = glmnet(x = Xtrain, y = Ytrain, alpha = elasticOut$bestTune$alpha, family = 'binomial')
+probHatTest    = predict(glmnetOut, Xtest, s=elasticOut$bestTune$lambda, type = 'response')
+YhatTestGlmnet = ifelse(probHatTest > 0.5, 'Yes', 'No')
+```
+
+Or, we can actually grab the predictions from the `elasticOut` object directly:
+
+```{r}
+YhatTest  = predict(elasticOut, Xtest, s=elasticOut$bestTune$lambda, type = 'raw')
+```
+
+Just to demonstrate they are the same, lets cross-tabulate these predictions (note: this isn't a confusion matrix!)
+
+```{r demonstrateSame}
+table(YhatTest, YhatTestGlmnet)
+```
+
+Let's take a look at the betaHat as well
+
+```{r}
+betaHat  = coef(glmnetOut, s=elasticOut$bestTune$lambda)
+betaHat
+```
+
+
+We can get the accuracy on the test data:
+
+```{r}
+mean(YhatTest == Ytest)
+```
+
+Also, we can plot the ROC curve as well
+
+```{r}
+probHatTest = predict(elasticOut, Xtest, s=elasticOut$bestTune$lambda, type = 'prob')
+rocOut = roc(response = Ytest, probHatTest$Yes)
+plot(rocOut)
+```
